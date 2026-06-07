@@ -19,6 +19,7 @@ local API. No cloud. No API keys. No database to run.
 ![platforms](https://img.shields.io/badge/platforms-Windows%20%7C%20macOS%20%7C%20Linux-555)
 ![storage](https://img.shields.io/badge/at%20rest-AES--256--GCM%20encrypted-2ea043)
 ![local-first](https://img.shields.io/badge/local--first-no%20cloud%20%C2%B7%20no%20keys-1f6feb)
+![license](https://img.shields.io/badge/license-MIT-blue)
 ![status](https://img.shields.io/badge/status-pre--release-orange)
 
 </div>
@@ -185,6 +186,10 @@ make dist       # assemble the USB drive layout (binaries + launchers)
 
 Run a single test: `go test ./internal/retrieval -run TestRRF -v`. Requires **Go 1.26+**. The
 whole stack is pure Go (no CGo), so it cross-compiles to win/mac/linux × amd64/arm64 from one host.
+
+## 📄 License
+
+[MIT](LICENSE) © 2026 Domu Inc.
 
 ---
 
