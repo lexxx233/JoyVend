@@ -51,7 +51,7 @@ func TestVec0AvailableAndParity(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	bf, err := s.bruteForceSearch("b", "m", query, nil, "any", 4)
+	bf, err := s.bruteForceSearch("b", "m", query, nil, "any", 4, nil)
 	if err != nil {
 		t.Fatal(err)
 	}

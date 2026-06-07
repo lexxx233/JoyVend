@@ -10,19 +10,21 @@ import (
 
 // KeywordSearch runs an FTS5/BM25 query over a bank, best-first. Returns up to
 // limit memory ids (Sim = -bm25 so higher is better).
-func (s *Store) KeywordSearch(bankID, query string, tags []string, tagsMatch string, limit int) ([]vector.Scored, error) {
+func (s *Store) KeywordSearch(bankID, query string, tags []string, tagsMatch string, limit int, excludeTags ...string) ([]vector.Scored, error) {
 	toks := tokenize(query)
 	if len(toks) == 0 {
 		return nil, nil
 	}
 	match := ftsQuery(toks)
 	tagClause, tagArgs := tagFilter("m.id", tags, tagsMatch)
+	exClause, exArgs := tagExcludeFilter("m.id", excludeTags)
 
 	q := `SELECT f.rowid, bm25(memory_fts) AS score
 	      FROM memory_fts f JOIN memory m ON m.id = f.rowid
-	      WHERE memory_fts MATCH ? AND m.bank_id = ?` + tagClause + `
+	      WHERE memory_fts MATCH ? AND m.bank_id = ?` + tagClause + exClause + `
 	      ORDER BY score ASC LIMIT ?`
 	args := append([]any{match, bankID}, tagArgs...)
+	args = append(args, exArgs...)
 	args = append(args, limit)
 
 	s.mu.Lock()
@@ -47,8 +49,9 @@ func (s *Store) KeywordSearch(bankID, query string, tags []string, tagsMatch str
 // VectorSearch returns the nearest memories by cosine. Default path is vec0 KNN
 // (D1), filtered by bank+model; it falls back to an exact brute-force scan when vec0
 // is unavailable or when tags are present (tags need the join). Both are exact.
-func (s *Store) VectorSearch(bankID, model string, query []float32, tags []string, tagsMatch string, limit int) ([]vector.Scored, error) {
-	if len(dedupe(tags)) == 0 {
+func (s *Store) VectorSearch(bankID, model string, query []float32, tags []string, tagsMatch string, limit int, excludeTags ...string) ([]vector.Scored, error) {
+	// vec0 KNN can't express the tag join/anti-join; tag include OR exclude → brute-force.
+	if len(dedupe(tags)) == 0 && len(dedupe(excludeTags)) == 0 {
 		s.mu.Lock()
 		useVec := s.vecAvailable && s.vecCreated
 		s.mu.Unlock()
@@ -58,14 +61,16 @@ func (s *Store) VectorSearch(bankID, model string, query []float32, tags []strin
 			return s.vec0KNN(bankID, model, query, limit)
 		}
 	}
-	return s.bruteForceSearch(bankID, model, query, tags, tagsMatch, limit)
+	return s.bruteForceSearch(bankID, model, query, tags, tagsMatch, limit, excludeTags)
 }
 
-func (s *Store) bruteForceSearch(bankID, model string, query []float32, tags []string, tagsMatch string, limit int) ([]vector.Scored, error) {
+func (s *Store) bruteForceSearch(bankID, model string, query []float32, tags []string, tagsMatch string, limit int, excludeTags []string) ([]vector.Scored, error) {
 	tagClause, tagArgs := tagFilter("e.memory_id", tags, tagsMatch)
+	exClause, exArgs := tagExcludeFilter("e.memory_id", excludeTags)
 	q := `SELECT e.memory_id, e.vec FROM embedding e
-	      WHERE e.bank_id = ? AND e.model = ?` + tagClause
+	      WHERE e.bank_id = ? AND e.model = ?` + tagClause + exClause
 	args := append([]any{bankID, model}, tagArgs...)
+	args = append(args, exArgs...)
 
 	qn := vector.Normalize(query)
 
@@ -98,12 +103,14 @@ func (s *Store) bruteForceSearch(bankID, model string, query []float32, tags []s
 
 // TemporalSearch returns memories whose event_at falls in [start,end], most-recent
 // first (the temporal recall arm, PLAN §5.4/D14).
-func (s *Store) TemporalSearch(bankID string, start, end int64, tags []string, tagsMatch string, limit int) ([]vector.Scored, error) {
+func (s *Store) TemporalSearch(bankID string, start, end int64, tags []string, tagsMatch string, limit int, excludeTags ...string) ([]vector.Scored, error) {
 	tagClause, tagArgs := tagFilter("m.id", tags, tagsMatch)
+	exClause, exArgs := tagExcludeFilter("m.id", excludeTags)
 	q := `SELECT m.id FROM memory m
-	      WHERE m.bank_id=? AND m.event_at IS NOT NULL AND m.event_at>=? AND m.event_at<=?` + tagClause + `
+	      WHERE m.bank_id=? AND m.event_at IS NOT NULL AND m.event_at>=? AND m.event_at<=?` + tagClause + exClause + `
 	      ORDER BY m.event_at DESC LIMIT ?`
 	args := append([]any{bankID, start, end}, tagArgs...)
+	args = append(args, exArgs...)
 	args = append(args, limit)
 
 	s.mu.Lock()
@@ -189,6 +196,21 @@ func tagFilter(idCol string, tags []string, tagsMatch string) (string, []any) {
 			idCol, placeholders), args
 	}
 	return fmt.Sprintf(" AND %s IN (SELECT memory_id FROM memory_tag WHERE tag IN (%s))", idCol, placeholders), args
+}
+
+// tagExcludeFilter builds a SQL fragment excluding any memory carrying one of tags
+// (used to keep auto-`capture` rows out of recall/reflect by default). Empty → no filter.
+func tagExcludeFilter(idCol string, tags []string) (string, []any) {
+	clean := dedupe(tags)
+	if len(clean) == 0 {
+		return "", nil
+	}
+	placeholders := strings.TrimSuffix(strings.Repeat("?,", len(clean)), ",")
+	args := make([]any, 0, len(clean))
+	for _, t := range clean {
+		args = append(args, t)
+	}
+	return fmt.Sprintf(" AND %s NOT IN (SELECT memory_id FROM memory_tag WHERE tag IN (%s))", idCol, placeholders), args
 }
 
 func tokenize(s string) []string {

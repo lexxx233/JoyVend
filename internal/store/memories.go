@@ -147,18 +147,36 @@ func (s *Store) insertOne(tx *sql.Tx, bankID string, now int64, it MemoryInput) 
 
 // ListMemories returns memories in a bank, newest first, paginated.
 func (s *Store) ListMemories(bankID string, limit, offset int) ([]domain.RecallResult, int, error) {
+	return s.ListMemoriesFiltered(bankID, limit, offset, "", "")
+}
+
+// ListMemoriesFiltered is ListMemories with optional fact_type and tag filters (e.g.
+// type=experience&tag=capture to read the raw-capture substrate for distillation).
+func (s *Store) ListMemoriesFiltered(bankID string, limit, offset int, factType, tag string) ([]domain.RecallResult, int, error) {
 	if limit <= 0 {
 		limit = 100
 	}
+	where := ` WHERE bank_id=?`
+	args := []any{bankID}
+	if factType != "" {
+		where += ` AND fact_type=?`
+		args = append(args, factType)
+	}
+	if tag != "" {
+		where += ` AND id IN (SELECT memory_id FROM memory_tag WHERE tag=?)`
+		args = append(args, tag)
+	}
+
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	var total int
-	if err := s.conn.QueryRowContext(s.ctx, `SELECT COUNT(*) FROM memory WHERE bank_id=?`, bankID).Scan(&total); err != nil {
+	if err := s.conn.QueryRowContext(s.ctx, `SELECT COUNT(*) FROM memory`+where, args...).Scan(&total); err != nil {
 		return nil, 0, err
 	}
+	listArgs := append(append([]any{}, args...), limit, offset)
 	rows, err := s.conn.QueryContext(s.ctx,
-		`SELECT id FROM memory WHERE bank_id=? ORDER BY event_at DESC, created_at DESC LIMIT ? OFFSET ?`,
-		bankID, limit, offset)
+		`SELECT id FROM memory`+where+` ORDER BY event_at DESC, created_at DESC LIMIT ? OFFSET ?`,
+		listArgs...)
 	if err != nil {
 		return nil, 0, err
 	}

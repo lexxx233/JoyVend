@@ -88,6 +88,19 @@ reflect / supersede protocol), then just `curl`s the local API. That's the whole
 integration — no MCP, no plugin, no config. (For chat clients that can't fetch, the GUI's
 **"Copy full instructions"** button and `joyvend guide` print the manual inline.)
 
+## 🪝 Automatic capture (optional)
+
+Relying on the agent to *remember* to save things is the one weak spot of "the agent does the
+reasoning." The fix keeps joyvend LLM-free but makes retention automatic: a host hook calls
+`joyvend capture` each turn to log the raw exchange as a low-tier, deduped `capture` memory (a
+safety net), and an auto-triggered nudge asks the agent to periodically **distill** those into
+curated `mental_model`s. Captures are hidden from normal recall (a substrate) until distilled, or
+via `recall {"include_captures": true}`.
+
+Drop-in recipes live in **[`integrations/`](integrations/)** — Claude Code `UserPromptSubmit` +
+`Stop` hooks, and a generic shell wrapper. They're non-fatal: if joyvend is stopped, capture is
+silently skipped and the turn proceeds.
+
 ## 🪟 The GUI
 
 Running joyvend with **no arguments** (double-clicking the drive launcher) opens a local web app
@@ -105,6 +118,7 @@ joyvend serve           # terminal mode (prompts for the password; great over SS
 joyvend snippet         # reprint the paste-into-your-agent block
 joyvend guide           # print the full agent operating manual (also GET /v1/guide)
 joyvend doctor          # diagnostics (no password needed)
+joyvend capture "..."   # log a raw turn (auto-retain; used by the hooks)
 joyvend retain "..."    # add a memory          (talks to a running server)
 joyvend recall "..."    # search your memories
 joyvend memories        # browse

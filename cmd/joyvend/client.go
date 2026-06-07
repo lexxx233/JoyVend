@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"os"
 	"strings"
 	"time"
 )
@@ -77,6 +78,52 @@ func cmdRetain(args []string) error {
 		return fmt.Errorf("server returned %d: %s", code, strings.TrimSpace(string(data)))
 	}
 	fmt.Println("remembered.")
+	return nil
+}
+
+// cmdCapture logs one raw turn (the auto-retain primitive that hooks call per turn).
+// It is intentionally non-fatal: if joyvend is down or rejects, it warns and exits 0
+// so a capture failure never blocks the user's turn.
+func cmdCapture(args []string) error {
+	fs := flag.NewFlagSet("capture", flag.ContinueOnError)
+	bank := fs.String("bank", "default", "memory bank")
+	server := fs.String("server", "", "server address")
+	role := fs.String("role", "", "turn role: user|assistant")
+	var tags multiFlag
+	fs.Var(&tags, "tag", "tag (repeatable)")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	text := strings.TrimSpace(strings.Join(fs.Args(), " "))
+	if text == "" {
+		return errors.New("usage: joyvend capture [--bank b] [--role user|assistant] [--tag t]... <text>")
+	}
+	body := map[string]any{"text": text}
+	if *role != "" {
+		body["role"] = *role
+	}
+	if len(tags) > 0 {
+		body["tags"] = []string(tags)
+	}
+	data, code, err := httpJSON("POST", serverBase(*server)+"/v1/banks/"+*bank+"/capture", body)
+	if err != nil { // joyvend down — never block the turn
+		fmt.Fprintln(os.Stderr, "joyvend capture skipped:", err)
+		return nil
+	}
+	if code != 200 {
+		fmt.Fprintf(os.Stderr, "joyvend capture skipped (server %d)\n", code)
+		return nil
+	}
+	var out struct {
+		Stored  bool   `json:"stored"`
+		Skipped string `json:"skipped"`
+	}
+	_ = json.Unmarshal(data, &out)
+	if out.Stored {
+		fmt.Println("captured.")
+	} else {
+		fmt.Printf("(skipped: %s)\n", out.Skipped)
+	}
 	return nil
 }
 

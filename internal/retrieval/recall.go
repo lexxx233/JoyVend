@@ -185,7 +185,14 @@ func factTier(r domain.RecallResult) int {
 func (r *Recaller) gatherRanked(ctx context.Context, bankID string, req domain.RecallRequest, tagsMatch string, limit int) ([]fusedScore, int, error) {
 	var arms [][]vector.Scored
 
-	kw, err := r.store.KeywordSearch(bankID, req.Query, req.Tags, tagsMatch, limit)
+	// Auto-captured raw turns are a hidden substrate: excluded from recall/reflect by
+	// default so they don't pollute results; opt back in with include_captures.
+	var excl []string
+	if !req.IncludeCaptures {
+		excl = []string{domain.CaptureTag}
+	}
+
+	kw, err := r.store.KeywordSearch(bankID, req.Query, req.Tags, tagsMatch, limit, excl...)
 	if err != nil {
 		return nil, 0, err
 	}
@@ -197,7 +204,7 @@ func (r *Recaller) gatherRanked(ctx context.Context, bankID string, req domain.R
 		if err != nil {
 			return nil, 0, err
 		}
-		vs, err := r.store.VectorSearch(bankID, r.embedder.Name(), qv, req.Tags, tagsMatch, limit)
+		vs, err := r.store.VectorSearch(bankID, r.embedder.Name(), qv, req.Tags, tagsMatch, limit, excl...)
 		if err != nil {
 			return nil, 0, err
 		}
@@ -206,7 +213,7 @@ func (r *Recaller) gatherRanked(ctx context.Context, bankID string, req domain.R
 		}
 	}
 	if win, ok := extractTemporalWindow(req.Query, temporalNow(req.QueryTimestamp)); ok {
-		ts, err := r.store.TemporalSearch(bankID, win.start, win.end, req.Tags, tagsMatch, limit)
+		ts, err := r.store.TemporalSearch(bankID, win.start, win.end, req.Tags, tagsMatch, limit, excl...)
 		if err != nil {
 			return nil, 0, err
 		}

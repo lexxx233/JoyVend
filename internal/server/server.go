@@ -45,6 +45,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("PUT /v1/banks/{bank}", s.putBank)
 	mux.HandleFunc("DELETE /v1/banks/{bank}", s.deleteBank)
 	mux.HandleFunc("POST /v1/banks/{bank}/retain", s.retain)
+	mux.HandleFunc("POST /v1/banks/{bank}/capture", s.capture)
 	mux.HandleFunc("POST /v1/banks/{bank}/recall", s.recallHandler)
 	mux.HandleFunc("GET /v1/banks/{bank}/memories", s.listMemories)
 	mux.HandleFunc("DELETE /v1/banks/{bank}/memories/{id}", s.deleteMemory)
@@ -160,6 +161,31 @@ func (s *Server) retain(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, 200, resp)
 }
 
+// capture logs one raw turn as a low-tier, mechanically-deduped safety-net memory
+// (auto-retain). A deduped/trivial skip is a 200 with stored:false, not an error.
+func (s *Server) capture(w http.ResponseWriter, r *http.Request) {
+	bank := r.PathValue("bank")
+	if !bankIDRe.MatchString(bank) {
+		writeErr(w, 400, "bad_request", "invalid bank_id")
+		return
+	}
+	var req domain.CaptureRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeErr(w, 400, "bad_request", "invalid JSON")
+		return
+	}
+	if strings.TrimSpace(req.Text) == "" {
+		writeErr(w, 400, "bad_request", "text is required")
+		return
+	}
+	resp, err := s.ingest.Capture(r.Context(), bank, req)
+	if err != nil {
+		writeErr(w, 500, "internal", err.Error())
+		return
+	}
+	writeJSON(w, 200, resp)
+}
+
 func (s *Server) recallHandler(w http.ResponseWriter, r *http.Request) {
 	bank := r.PathValue("bank")
 	var req domain.RecallRequest
@@ -203,7 +229,9 @@ func (s *Server) listMemories(w http.ResponseWriter, r *http.Request) {
 	bank := r.PathValue("bank")
 	limit := atoiDefault(r.URL.Query().Get("limit"), 100)
 	offset := atoiDefault(r.URL.Query().Get("offset"), 0)
-	items, total, err := s.store.ListMemories(bank, limit, offset)
+	factType := r.URL.Query().Get("type") // e.g. experience
+	tag := r.URL.Query().Get("tag")       // e.g. capture (to read the raw substrate for distillation)
+	items, total, err := s.store.ListMemoriesFiltered(bank, limit, offset, factType, tag)
 	if err != nil {
 		writeErr(w, 500, "internal", err.Error())
 		return
@@ -326,6 +354,16 @@ REFLECT — POST {BASE}/v1/banks/default/reflect  {"query":"<topic/person>"}
   - After reflecting, RETAIN your conclusion as type "mental_model" with
     "supersedes":["<old model id>"] so the stale synthesis is removed.
 
+CAPTURE & DISTILL (auto-retain safety net):
+  - A host hook may auto-log each raw turn via POST {BASE}/v1/banks/default/capture
+    {text, role} — stored as a low-tier "experience" tagged "capture", deduped. You rarely
+    call this yourself, and these raw rows are HIDDEN from recall/reflect by default.
+  - Periodically (or when nudged), DISTILL: read recent raw captures with
+    GET {BASE}/v1/banks/default/memories?type=experience&tag=capture&limit=50 , then promote the
+    durable ones via retain {type:"mental_model"|"observation", supersedes:[<raw capture ids>]} —
+    which folds them up the hierarchy and deletes the raw rows. Leave or supersede the noise.
+  - To search the raw log directly, pass {"include_captures": true} to recall.
+
 FORGETTING:
   - joyvend deletes whatever you supersede and prunes orphaned data automatically.
   - It does NOT auto-summarize or dedup for you — that is your job; you are the reasoner.
@@ -351,6 +389,7 @@ func SnippetText(addr, token string) string {
 		"▶ First, fetch your instructions:  GET " + base + "/v1/guide",
 		"Then follow them — remember facts about the user/project as you learn them, and",
 		"recall before you answer. Use your shell or fetch tool to call the API." + auth,
+		"(Tip: for hands-off retention, install the capture hook — see integrations/claude-code.)",
 		"─────────────────────────────────────────────────────────────────",
 	}, "\n")
 }

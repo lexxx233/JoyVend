@@ -50,6 +50,8 @@ func main() {
 		err = cmdGuide()
 	case "doctor":
 		err = cmdDoctor()
+	case "capture":
+		err = cmdCapture(args)
 	case "retain":
 		err = cmdRetain(args)
 	case "recall":
@@ -62,7 +64,7 @@ func main() {
 		sqliteVer, vec, _ := runtimeInfo()
 		fmt.Printf("joyvend %s\n  sqlite %s, vec0 %s\n", version, sqliteVer, yesno(vec, "available", "unavailable"))
 	default:
-		fmt.Fprintln(os.Stderr, "usage: joyvend <gui|serve|snippet|guide|doctor|retain|recall|memories|banks|version>")
+		fmt.Fprintln(os.Stderr, "usage: joyvend <gui|serve|snippet|guide|doctor|capture|retain|recall|memories|banks|version>")
 		os.Exit(1)
 	}
 	if err != nil {

@@ -262,6 +262,52 @@ func TestReflect(t *testing.T) {
 	}
 }
 
+func TestCaptureEndpoint(t *testing.T) {
+	ts := newStack(t, "")
+	type cap struct {
+		Stored  bool   `json:"stored"`
+		Skipped string `json:"skipped"`
+	}
+
+	var c cap
+	if code := ts.do(t, http.MethodPost, "/v1/banks/default/capture",
+		map[string]any{"text": "the user lives in Berlin and codes in Go", "role": "user"}, &c); code != 200 || !c.Stored {
+		t.Fatalf("capture = %d %+v, want 200 stored", code, c)
+	}
+
+	var dup cap
+	ts.do(t, http.MethodPost, "/v1/banks/default/capture",
+		map[string]any{"text": "the user lives in Berlin and codes in Go", "role": "user"}, &dup)
+	if dup.Stored || dup.Skipped != "duplicate" {
+		t.Fatalf("duplicate capture = %+v, want skipped=duplicate", dup)
+	}
+
+	if code := ts.do(t, http.MethodPost, "/v1/banks/default/capture", map[string]any{"text": ""}, nil); code != 400 {
+		t.Fatalf("empty capture text = %d, want 400", code)
+	}
+
+	// memories?tag=capture lists the raw row...
+	var ml struct {
+		Total int `json:"total"`
+	}
+	ts.do(t, http.MethodGet, "/v1/banks/default/memories?tag=capture", nil, &ml)
+	if ml.Total != 1 {
+		t.Fatalf("memories?tag=capture total=%d, want 1", ml.Total)
+	}
+	// ...but recall excludes it by default (no curated memory exists, so no results).
+	var rec struct {
+		Results []struct {
+			Text string `json:"text"`
+		} `json:"results"`
+	}
+	ts.do(t, http.MethodPost, "/v1/banks/default/recall", map[string]any{"query": "Berlin Go"}, &rec)
+	for _, r := range rec.Results {
+		if strings.Contains(r.Text, "Berlin") {
+			t.Fatalf("recall leaked a capture row: %v", rec.Results)
+		}
+	}
+}
+
 func TestGuideEndpoint(t *testing.T) {
 	ts := newStack(t, "")
 	resp, err := http.Get(ts.srv.URL + "/v1/guide")
