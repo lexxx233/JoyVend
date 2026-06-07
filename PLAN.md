@@ -1075,7 +1075,7 @@ output for the test api_key/passphrase/token and fails if found.
 - [ ] SMOKE: in-memory modernc SQLite `CREATE VIRTUAL TABLE t USING fts5(x)` (confirms FTS5 compiled in)
 - [ ] **†review** runtime backend probe: attempt `CREATE VIRTUAL TABLE _probe USING vec0(e float[2])`; set `vec_available`; default to `vec0`, else brute-force fallback (correctness identical)
 
-**Tests:** `paths_test` (faked exe under `bin/<os>-<arch>/` → `DataDir` is the shared `data/`;
+**Tests:** `paths_test` (faked exe at the drive root → `DataDir` is `joyvend_kb/` beside it;
 temp-exe → `JOYVEND_DATA_DIR`; read-only dir → host fallback + `Portable()==false`); CI six-target
 compile; `fts5_smoke_test`; **†review** no-CGo deps assertion.
 
@@ -1204,13 +1204,13 @@ non-loopback refused; **†review** spoofed `Host` header rejected; **†review*
 - [ ] `serve` (first-launch auto-setup on TTY; `--addr`, `--offline`)
 - [ ] `doctor` (data dir + portability, FS type, journal mode, embedder tier, chat reachability, schema_version, lock status, FTS5 smoke, **†review** cold-scan benchmark, **†review** stale `*.tmp` cleanup)
 - [ ] CLI memory ops as thin HTTP clients (`--server`, `--json`, exit codes)
-- [ ] `Makefile dist`: build six → `bin/<os>-<arch>/`, copy launchers, assemble `joyvend/` tree
+- [ ] `Makefile dist`: build six → `joyvend-<os>-<arch>[.exe]` flat at the drive root, copy launchers
 - [ ] launchers detect OS/arch and exec; **†review** `joyvend.cmd` uses `PROCESSOR_ARCHITECTURE`+`PROCESSOR_ARCHITEW6432` (prefer arm64 if either reports ARM64)
 - [ ] `README` (exFAT, `xattr` quarantine, SmartScreen, safe-eject); `SECURITY.md` (threat model + D13 status)
 
 **Tests:** `version` fields; `doctor` reports portable + journal mode; **†review** launcher shell
 test incl. Windows arch-detection branch; **†review** paths test asserting `os.Executable()` resolves
-to `bin/<os>-<arch>/joyvend` when invoked **via each launcher** (the load-bearing resolver);
+to `joyvend-<os>-<arch>` at the drive root when invoked **via each launcher** (the load-bearing resolver);
 `make dist` produces the expected tree; gated e2e (`-tags e2e`): build linux binary, `serve` in a
 temp drive, retain+recall via CLI.
 

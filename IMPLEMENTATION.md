@@ -23,7 +23,7 @@ enhancements and hardening, not gaps in the happy path.
 | **M7 CLI** | `gui` (default) / `serve` / `snippet` / `version` |
 | **M8 hardening** | graceful-shutdown flush + key zeroize; single-instance lock; persistence-failure surfaced in `/v1/health` |
 
-**Tests:** ~95 tests across 9 packages (`go test ./...` green), plus a verified end-to-end
+**Tests:** ~115 tests across 10 packages (`go test ./...` green), plus a verified end-to-end
 smoke (first-launch → retain → semantic recall → encrypted persistence across restart →
 no plaintext on disk → wrong-password rejection → graceful shutdown). All adversarial-review
 bugs fixed (AAD truncation, flush-error swallowing, recency rerank, applyPragmas leak,

@@ -67,6 +67,7 @@ your assistant — no MCP server, no plugin, no config files.
 ## 🚀 Quick start
 
 ```sh
+git clone https://github.com/lexxx233/JoyVend.git && cd JoyVend
 go build ./cmd/joyvend      # or: make build  ->  bin/joyvend
 ./bin/joyvend               # opens the GUI in your browser (double-click on a stick)
 ```
@@ -177,7 +178,7 @@ hardening (mlock, idle auto-lock), and DEK rotation. See
 
 ```sh
 make build      # local binary
-make test       # go test ./...   (~108 tests)
+make test       # go test ./...   (~115 tests)
 make vet
 make guard      # prove the build pulls in zero CGo
 make cross      # build all six OS/arch targets, CGO_ENABLED=0

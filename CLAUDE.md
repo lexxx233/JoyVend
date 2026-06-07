@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project status
 
-**v1 core implemented.** The full design lives in `PLAN.md` (the source of truth for decisions D1–D20). A working Go implementation is in place: encrypted store, local CPU embeddings, keyword + vector recall, and a REST API. The system runs end-to-end (first-launch setup → retain → semantic recall → encrypted persistence across restarts).
+**v1 implemented; public repo, MIT-licensed** ([github.com/lexxx233/JoyVend](https://github.com/lexxx233/JoyVend)). The full design lives in `PLAN.md` (the source of truth for decisions D1–D20); done-vs-deferred status in `IMPLEMENTATION.md`. A working Go implementation is in place: encrypted store, local CPU embeddings, keyword + semantic + temporal recall, agent-driven reflect over a knowledge hierarchy, supersession + orphan pruning, and a REST API + cross-platform GUI. Runs end-to-end (first-launch setup → retain → recall/reflect → encrypted persistence across restarts).
 
 **Build / test / run** (Go 1.26+, pure Go, no CGo):
 
@@ -25,7 +25,7 @@ go test ./internal/retrieval -run TestRRF -v   # a single test
 
 **Forgetting:** the agent supersedes stale syntheses via `retain {supersedes:[ids]}` (joyvend deletes them); orphan entities auto-pruned on delete (`store.PruneOrphans`). LLM-adjudicated dedup/consolidation stays the agent's job. The host LLM needs the operating manual (`GuideText`) since joyvend does no reasoning.
 
-**Implemented:** whole-DB encryption (D13) + debounced re-seal (D19); local CPU embeddings (bge-small) + hash fallback; **vec0 KNN default** (modernc/sqlite/vec) with brute-force fallback for tag-filtered queries (D1); keyword + semantic + **temporal** recall arms fused with RRF + recency rerank; **reflect** + knowledge hierarchy (memory `type`: world/experience/observation/mental_model; reflect does broad retrieval + entity expansion and prioritizes the agent's stored syntheses mental_model>observation>raw — mirrors hindsight's reflect hierarchy; joyvend gathers, the agent reasons + retains conclusions as mental_models); **migration framework** (versioned, fail-closed, `edge`/graph-ready schema); single-instance lock; cross-platform **GUI** + REST API; doctor + thin-client CLI. **No passphrase complexity policy** (user owns strength; NO-RECOVERY warning). ~110 tests, all 6 targets cross-compile CGO_ENABLED=0.
+**Implemented:** whole-DB encryption (D13) + debounced re-seal (D19); local CPU embeddings (bge-small) + hash fallback; **vec0 KNN default** (modernc/sqlite/vec) with brute-force fallback for tag-filtered queries (D1); keyword + semantic + **temporal** recall arms fused with RRF + recency rerank; **reflect** + knowledge hierarchy (memory `type`: world/experience/observation/mental_model; reflect does broad retrieval + entity expansion and prioritizes the agent's stored syntheses mental_model>observation>raw — mirrors hindsight's reflect hierarchy; joyvend gathers, the agent reasons + retains conclusions as mental_models); **migration framework** (versioned, fail-closed, `edge`/graph-ready schema); single-instance lock; cross-platform **GUI** + REST API; doctor + thin-client CLI. **No passphrase complexity policy** (user owns strength; NO-RECOVERY warning). ~115 tests, all 6 targets cross-compile CGO_ENABLED=0.
 
 **Still deferred** (see IMPLEMENTATION.md): `PATCH /settings` (D16), key-in-RAM hardening (mlock, argon2 calibration, entropy policy, idle auto-lock), DEK rotation. Update this file as those land.
 
