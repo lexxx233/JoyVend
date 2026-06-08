@@ -204,7 +204,14 @@ func (r *Recaller) gatherRanked(ctx context.Context, bankID string, req domain.R
 		if err != nil {
 			return nil, 0, err
 		}
-		vs, err := r.store.VectorSearch(bankID, r.embedder.Name(), qv, req.Tags, tagsMatch, limit, excl...)
+		var vs []vector.Scored
+		if req.IncludeCaptures {
+			// captures aren't in vec_idx — the exact scan is needed to reach them.
+			vs, err = r.store.VectorSearchExact(bankID, r.embedder.Name(), qv, req.Tags, tagsMatch, limit)
+		} else {
+			// excluding only `capture` keeps the fast vec0 path (captures aren't indexed).
+			vs, err = r.store.VectorSearch(bankID, r.embedder.Name(), qv, req.Tags, tagsMatch, limit, domain.CaptureTag)
+		}
 		if err != nil {
 			return nil, 0, err
 		}

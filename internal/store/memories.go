@@ -116,7 +116,11 @@ func (s *Store) insertOne(tx *sql.Tx, bankID string, now int64, it MemoryInput) 
 			id, bankID, it.EmbedModel, len(nv), blob); err != nil {
 			return err
 		}
-		if s.vecAvailable && s.vecCreated {
+		// Auto-captures are excluded from recall by default, so keep them OUT of the
+		// vec0 index — that way default recall stays on the fast vec0 KNN path (no tag
+		// anti-join → no brute-force). They remain in `embedding` for the brute-force
+		// path used by include_captures + dedup.
+		if s.vecAvailable && s.vecCreated && !hasTag(it.Tags, domain.CaptureTag) {
 			if _, err := tx.ExecContext(ctx,
 				`INSERT INTO vec_idx(memory_id, bank_id, model, embedding) VALUES(?,?,?,?)`,
 				id, bankID, it.EmbedModel, blob); err != nil {

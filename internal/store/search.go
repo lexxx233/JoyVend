@@ -5,6 +5,7 @@ import (
 	"sort"
 	"strings"
 
+	"joyvend.io/internal/domain"
 	"joyvend.io/internal/vector"
 )
 
@@ -50,8 +51,10 @@ func (s *Store) KeywordSearch(bankID, query string, tags []string, tagsMatch str
 // (D1), filtered by bank+model; it falls back to an exact brute-force scan when vec0
 // is unavailable or when tags are present (tags need the join). Both are exact.
 func (s *Store) VectorSearch(bankID, model string, query []float32, tags []string, tagsMatch string, limit int, excludeTags ...string) ([]vector.Scored, error) {
-	// vec0 KNN can't express the tag join/anti-join; tag include OR exclude → brute-force.
-	if len(dedupe(tags)) == 0 && len(dedupe(excludeTags)) == 0 {
+	// vec0 KNN can't express a tag join/anti-join. BUT auto-`capture` rows are never
+	// inserted into vec_idx, so excluding ONLY the capture tag needs no anti-join — vec0
+	// already returns curated-only. Any include-tag, or any other exclude-tag, → brute-force.
+	if len(dedupe(tags)) == 0 && excludesOnlyCaptures(excludeTags) {
 		s.mu.Lock()
 		useVec := s.vecAvailable && s.vecCreated
 		s.mu.Unlock()
@@ -62,6 +65,23 @@ func (s *Store) VectorSearch(bankID, model string, query []float32, tags []strin
 		}
 	}
 	return s.bruteForceSearch(bankID, model, query, tags, tagsMatch, limit, excludeTags)
+}
+
+// VectorSearchExact always scans the full embedding table (exact brute-force), so it
+// covers rows absent from vec_idx — i.e. auto-captures. Used for include_captures recall.
+func (s *Store) VectorSearchExact(bankID, model string, query []float32, tags []string, tagsMatch string, limit int, excludeTags ...string) ([]vector.Scored, error) {
+	return s.bruteForceSearch(bankID, model, query, tags, tagsMatch, limit, excludeTags)
+}
+
+// excludesOnlyCaptures reports whether excludeTags is empty or exactly {capture} — the
+// case where vec0 stays valid because captures aren't indexed.
+func excludesOnlyCaptures(excludeTags []string) bool {
+	for _, t := range dedupe(excludeTags) {
+		if t != domain.CaptureTag {
+			return false
+		}
+	}
+	return true
 }
 
 func (s *Store) bruteForceSearch(bankID, model string, query []float32, tags []string, tagsMatch string, limit int, excludeTags []string) ([]vector.Scored, error) {

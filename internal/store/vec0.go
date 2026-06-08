@@ -6,6 +6,7 @@ import (
 
 	_ "modernc.org/sqlite/vec" // pure-Go sqlite-vec: registers the vec0 vtable (D1)
 
+	"joyvend.io/internal/domain"
 	"joyvend.io/internal/vector"
 )
 
@@ -54,8 +55,11 @@ func (s *Store) ensureVecIndex(dim int) error {
 		`CREATE VIRTUAL TABLE IF NOT EXISTS vec_idx USING vec0(memory_id integer primary key, bank_id text, model text, embedding float[%d] distance_metric=cosine)`, dim)); err != nil {
 		return err
 	}
+	// Backfill curated rows only — auto-captures stay out of the index (see insertOne).
 	if _, err := s.conn.ExecContext(s.ctx,
-		`INSERT INTO vec_idx(memory_id,bank_id,model,embedding) SELECT memory_id,bank_id,model,vec FROM embedding`); err != nil {
+		`INSERT INTO vec_idx(memory_id,bank_id,model,embedding)
+		 SELECT memory_id,bank_id,model,vec FROM embedding
+		 WHERE memory_id NOT IN (SELECT memory_id FROM memory_tag WHERE tag=?)`, domain.CaptureTag); err != nil {
 		return err
 	}
 	s.vecCreated = true

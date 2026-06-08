@@ -215,10 +215,12 @@ both persist on the stick, so moving the stick carries full state.
   from the binary location, never `$HOME`/cwd; tolerant of exFAT/FAT32 and surprise removal.
 
 ### 2.3 Non-goals (v1 — reserved for later)
-- **Reflect** (LLM synthesis / agentic tool loop) — route reserved, returns `501`.
+> Update: `reflect` (agent-driven), the `observation`/`mental_model` types, the temporal arm, vec0
+> default, migrations, auto-retain (capture+distill), and doctor/thin-client CLI have all shipped
+> since this section was written — see §0.0. Remaining non-goals:
 - **Graph-traversal recall arm** — schema is graph-ready (`entity`, `edge`) but the arm is deferred
   to v2; RRF degrades to the arms present.
-- Cross-encoder rerank, observation/consolidation, mental models, directives, webhooks, audit logs,
+- Cross-encoder rerank, auto-consolidation, directives, webhooks, audit logs,
   async/operations API, `budget` tiers, `chunks`/`source_facts` in results, compound `tag_groups`,
   multi-tenant `/default/` segment, second UI port, Postgres, Docker-first distribution.
 
@@ -441,7 +443,7 @@ right column is the rare model-missing fallback.
 | Recall arms | keyword + semantic + temporal | keyword + semantic + temporal | keyword + temporal (semantic dropped) |
 | Rerank | RRF-passthrough + recency | same | same |
 | Graph arm | populated (v2 arm) | n/a (no extraction) | n/a |
-| Reflect | available (v2) | disabled (`ErrLLMUnavailable`) | disabled |
+| Reflect | available | available (agent-driven gather, no LLM) | available |
 
 > **D15:** when the `HashEmbedder` fallback is active its semantic arm largely duplicates BM25, so the
 > semantic arm is dropped in that mode to avoid double-counting in RRF. With the default local model
@@ -596,7 +598,7 @@ Banks auto-create lazily on first `retain`/`recall`. `bank_id` ~ `^[A-Za-z0-9][A
 | `GET` | `/v1/banks/{bank_id}/memories?type=&q=&tags=&limit=100&offset=0` | → `ListMemoriesResponse` | Admin browse; offset/limit pagination lives here. |
 | `GET` | `/v1/banks/{bank_id}/memories/{memory_id}` | → `Memory` | `404` if absent. |
 | `DELETE` | `/v1/banks/{bank_id}/memories/{memory_id}` | → `{deleted:true}` | |
-| `POST` | `/v1/banks/{bank_id}/reflect` | → `501` | Reserved for v2. |
+| `POST` | `/v1/banks/{bank_id}/reflect` | `RecallRequest` → `ReflectResponse` | Agent-driven gather: broad retrieval + entity expansion, prioritizes mental_model>observation>raw. |
 
 ### 7.4 Loopback & CSRF (corrected †review)
 *(No setup/locked gating — the server runs only when set-up + unlocked, §11.1.)*
@@ -1184,18 +1186,21 @@ vectors when a bank mixes `hash` + remote.
 
 ### M6 — HTTP API
 **Goal:** `net/http` server exposing the full v1 surface with gating, loopback/Host guard, CSRF.
+> Shipped divergence: the REST server runs **only unlocked**, so there are **no** `/setup`/`/unlock`/`/lock`
+> routes (unlock is the GUI `/api/*` flow or the `serve` TTY); `reflect` is implemented (200, agent-driven)
+> and a `capture` route was added. The checklist below is the original plan — see §0.0 / IMPLEMENTATION.md.
 - [ ] router under `/v1`; bind `127.0.0.1`; **†review** reject non-loopback unless explicit flag (log loudly); validate `Host` header against loopback literals
 - [ ] gating middleware: `!setup_complete`→409; `setup_complete && !unlocked`→423
 - [ ] handlers: `GET /health` (always), `POST /setup` (409 if config exists; **†review** shared anthropic validator), `POST /unlock` (401 bad; **†review** `crypto/rand` token, `ConstantTimeCompare`, TTL; rate-limit 5/min + backoff; **†review** persisted fail counter), `POST /lock`, `GET/PATCH /settings`
 - [ ] **†review** `PATCH /settings` dim-conflict → 400 (field=embedding_model) unless coercible to pinned dim
 - [ ] banks: `GET /banks`, `PUT/DELETE /banks/{id}`; bank_id regex
-- [ ] memory: retain, recall, `GET memories` (paginated), `GET/DELETE memories/{id}`, `reflect`→501
+- [ ] memory: retain, **capture**, recall, `GET memories` (paginated, `?type=&tag=`), `GET/DELETE memories/{id}`, `reflect`→200 (agent-driven)
 - [ ] session-token bearer enforcement on bank routes (config flag, default ON); **†review** Origin/Referer or custom-header CSRF check
 - [ ] `server/client.go`: thin CLI HTTP client; auto-unlock prompt flow
 - [ ] wire retain/recall to ingest/retrieval; uniform error envelope
 
 **Tests:** health before setup → `setup_complete=false`; bank route → 409; after setup lock→423,
-unlock(bad)→401, unlock(good)→200+token; retain→recall round-trip over HTTP; reflect→501;
+unlock(bad)→401, unlock(good)→200+token; retain→recall round-trip over HTTP; reflect→200;
 non-loopback refused; **†review** spoofed `Host` header rejected; **†review** HTTP setup test
 (POST→200, second POST→409, anthropic+no-embedder→400); validation 400s; pagination.
 
@@ -1243,8 +1248,8 @@ rejected; golden API contract fixtures (retain/recall/health/settings); **†rev
   per-OS single-instance lock, admin pagination, **`-race` concurrency**.
 - **Provider adapters (`httptest`):** assert outbound request shape + parse canned responses —
   no real key/network.
-- **HTTP API (`httptest`):** gating (409/423/401), retain→recall round-trip, validation 400s,
-  reflect 501, loopback + `Host`-header refusal, HTTP setup (409/anthropic-400), pagination.
+- **HTTP API (`httptest`):** retain→recall round-trip, capture + recall-exclusion, reflect 200,
+  validation 400s, loopback + `Host`-header refusal, pagination.
 - **End-to-end (`-tags e2e`):** build linux binary, `serve` against a temp drive, exercise CLI;
   shell test for launcher selection (incl. Windows arch branch).
 - **Cross-platform CI:** the six-target `CGO_ENABLED=0` matrix + no-CGo guard on every push;

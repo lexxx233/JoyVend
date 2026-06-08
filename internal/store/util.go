@@ -33,3 +33,12 @@ func dedupe(in []string) []string {
 func isoFromUnix(sec int64) string {
 	return time.Unix(sec, 0).UTC().Format(time.RFC3339)
 }
+
+func hasTag(tags []string, want string) bool {
+	for _, t := range tags {
+		if t == want {
+			return true
+		}
+	}
+	return false
+}

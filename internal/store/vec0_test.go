@@ -4,8 +4,47 @@ import (
 	"reflect"
 	"testing"
 
+	"joyvend.io/internal/domain"
 	"joyvend.io/internal/vector"
 )
+
+func TestCapturesNotIndexedInVec0(t *testing.T) {
+	s := openTestStore(t)
+	if !s.VecAvailable() {
+		t.Skip("vec0 backend not available in this build")
+	}
+	// id 1 curated, id 2 capture-tagged — both with embeddings.
+	retainVec(t, s, "b",
+		map[int64][]float32{1: {1, 0, 0, 0}, 2: {0.95, 0.05, 0, 0}},
+		map[int64][]string{2: {domain.CaptureTag}})
+
+	// vec_idx must hold ONLY the curated row.
+	var n int
+	if err := s.conn.QueryRowContext(s.ctx, `SELECT COUNT(*) FROM vec_idx`).Scan(&n); err != nil {
+		t.Fatal(err)
+	}
+	if n != 1 {
+		t.Fatalf("vec_idx has %d rows, want 1 (capture must not be indexed)", n)
+	}
+
+	// VectorSearch excluding only `capture` takes the fast vec0 path → curated only.
+	def, err := s.VectorSearch("b", "m", []float32{1, 0, 0, 0}, nil, "any", 5, domain.CaptureTag)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if ids := vecIDs(def); len(ids) != 1 || ids[0] != 1 {
+		t.Fatalf("VectorSearch(exclude capture) = %v, want [1] (vec0, curated only)", ids)
+	}
+
+	// VectorSearchExact (brute-force over the embedding table) still reaches the capture.
+	all, err := s.VectorSearchExact("b", "m", []float32{1, 0, 0, 0}, nil, "any", 5)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(all) != 2 {
+		t.Fatalf("VectorSearchExact returned %d rows, want 2 (includes the capture)", len(all))
+	}
+}
 
 func vecIDs(xs []vector.Scored) []int64 {
 	out := make([]int64, len(xs))

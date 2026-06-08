@@ -67,7 +67,7 @@ your assistant — no MCP server, no plugin, no config files.
 ## 🚀 Quick start
 
 ```sh
-git clone https://github.com/lexxx233/JoyVend.git && cd JoyVend
+git clone https://github.com/lexxx233/JoyVend-memory-capsule.git && cd JoyVend-memory-capsule
 go build ./cmd/joyvend      # or: make build  ->  bin/joyvend
 ./bin/joyvend               # opens the GUI in your browser (double-click on a stick)
 ```
@@ -134,8 +134,10 @@ Headless: set `JOYVEND_PASSPHRASE` (or pipe it on stdin) for `serve`.
 |---|---|---|
 | `GET`  | `/v1/health` | status, embedder, memory count |
 | `POST` | `/v1/banks/{bank}/retain` | store memories |
+| `POST` | `/v1/banks/{bank}/capture` | auto-log a raw turn (deduped `capture` memory) |
 | `POST` | `/v1/banks/{bank}/recall` | semantic + keyword + temporal recall |
-| `GET`  | `/v1/banks/{bank}/memories` | browse (paginated) |
+| `POST` | `/v1/banks/{bank}/reflect` | broad synthesis bundle (curated tiers first) |
+| `GET`  | `/v1/banks/{bank}/memories` | browse (paginated; `?type=&tag=`) |
 | `DELETE` | `/v1/banks/{bank}/memories/{id}` | delete one |
 | `GET` / `PUT` / `DELETE` | `/v1/banks[/{bank}]` | list / upsert / delete banks |
 
@@ -182,17 +184,19 @@ on any OS. Tips:
 
 ## 🗺 Roadmap
 
-Implemented and tested today: encrypted store, local CPU embeddings, vec0 + brute-force vector
-search, keyword + semantic + temporal recall, migration framework, single-instance lock, the GUI,
-REST API, and CLI. Still planned: runtime settings changes (`PATCH /settings`), extra key-in-RAM
-hardening (mlock, idle auto-lock), and DEK rotation. See
+Implemented and tested today: encrypted store (off-lock re-seal), local CPU embeddings, vec0 +
+brute-force vector search, keyword + semantic + temporal recall, **reflect** + the knowledge
+hierarchy, **auto-retain** (capture + distill), supersession + orphan pruning, migration framework,
+single-instance lock, the GUI, REST API, and CLI. Still planned: runtime settings changes
+(`PATCH /v1/settings`), extra key-in-RAM hardening (mlock, idle auto-lock), DEK rotation, and a
+capture rotation cap. See
 **[IMPLEMENTATION.md](IMPLEMENTATION.md)** for the full status.
 
 ## 🧪 Development
 
 ```sh
 make build      # local binary
-make test       # go test ./...   (~115 tests)
+make test       # go test ./...   (~123 tests)
 make vet
 make guard      # prove the build pulls in zero CGo
 make cross      # build all six OS/arch targets, CGO_ENABLED=0
