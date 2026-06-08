@@ -6,9 +6,11 @@ package gui
 
 import (
 	"context"
-	_ "embed"
+	"embed"
 	"encoding/json"
 	"fmt"
+	"io/fs"
+	"mime"
 	"net"
 	"net/http"
 	"os"
@@ -25,8 +27,38 @@ import (
 	"joyvend.io/internal/server"
 )
 
-//go:embed web/index.html
-var indexHTML []byte
+// The whole web/ tree is embedded (the dashboard page plus self-hosted woff2
+// fonts under web/fonts/), so the GUI renders identically with no network.
+//
+//go:embed web
+var webFS embed.FS
+
+// webRoot is web/ rooted so request paths like /fonts/x.woff2 map straight to
+// fonts/x.woff2; indexHTML is the dashboard, read once at startup.
+var webRoot = mustSub(webFS, "web")
+var indexHTML = mustReadFile(webRoot, "index.html")
+
+func init() {
+	// Guarantee a correct Content-Type for the bundled fonts even on hosts whose
+	// mime table lacks woff2 (e.g. the stick plugged into a fresh Windows box).
+	_ = mime.AddExtensionType(".woff2", "font/woff2")
+}
+
+func mustSub(fsys fs.FS, dir string) fs.FS {
+	s, err := fs.Sub(fsys, dir)
+	if err != nil {
+		panic(err)
+	}
+	return s
+}
+
+func mustReadFile(fsys fs.FS, name string) []byte {
+	b, err := fs.ReadFile(fsys, name)
+	if err != nil {
+		panic(err)
+	}
+	return b
+}
 
 type App struct {
 	layout  paths.Layout
@@ -79,7 +111,8 @@ func (a *App) Run() error {
 
 func (a *App) handler() http.Handler {
 	mux := http.NewServeMux()
-	mux.HandleFunc("GET /{$}", a.index) // exactly "/", so it doesn't shadow /v1/ or /api/
+	mux.HandleFunc("GET /{$}", a.index)                   // exactly "/", so it doesn't shadow /v1/ or /api/
+	mux.Handle("GET /fonts/", http.FileServerFS(webRoot)) // self-hosted woff2, served from the embedded tree
 	mux.HandleFunc("GET /api/state", a.state)
 	mux.HandleFunc("POST /api/setup", a.setup)
 	mux.HandleFunc("POST /api/unlock", a.unlock)
