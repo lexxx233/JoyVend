@@ -72,7 +72,40 @@ func Open(ctx context.Context, layout paths.Layout, password []byte, firstLaunch
 		}
 		cfg, dek = c, d
 	}
+	return buildRuntime(ctx, layout, cfg, dek, version)
+}
 
+// OpenWithDEK builds the runtime from an externally-supplied 32-byte DEK instead of
+// a password. This is the seam the mykeep suite aggregator uses: it derives one
+// master key and hands each component its own sub-key, so one unlock arms everything.
+// On first launch it writes a config with an EMPTY secret envelope — the master
+// envelope is the aggregator's (in mykeep.suite.json), not capsule's. The dek slice
+// is handed to the runtime's KeyStore, which wipes it on Close.
+func OpenWithDEK(ctx context.Context, layout paths.Layout, dek []byte, firstLaunch bool, version string) (*Runtime, error) {
+	var cfg *config.Config
+	if firstLaunch {
+		emb := BuildEmbedder(ctx, layout, nil)
+		c := config.Default()
+		c.Embedding.Model = embed.DefaultModel
+		c.Embedding.Dim = emb.Dim()
+		// c.Secret intentionally left zero — the aggregator owns the master envelope.
+		if err := config.Save(layout.ConfigPath(), &c); err != nil {
+			return nil, err
+		}
+		cfg = &c
+	} else {
+		c, err := config.Load(layout.ConfigPath())
+		if err != nil {
+			return nil, err
+		}
+		cfg = c
+	}
+	return buildRuntime(ctx, layout, cfg, dek, version)
+}
+
+// buildRuntime assembles the unlocked runtime from a resolved config + a DEK. It is
+// the shared tail of Open (password-derived DEK) and OpenWithDEK (injected DEK).
+func buildRuntime(ctx context.Context, layout paths.Layout, cfg *config.Config, dek []byte, version string) (*Runtime, error) {
 	keys := secret.NewKeyStore(dek)
 	emb := BuildEmbedder(ctx, layout, cfg)
 	st, err := store.OpenEncrypted(layout.DBPath(), keys, store.Options{
@@ -109,6 +142,11 @@ func BuildEmbedder(ctx context.Context, layout paths.Layout, cfg *config.Config)
 		if cfg.Embedding.Dim > 0 {
 			dim = cfg.Embedding.Dim
 		}
+	}
+	// Escape hatch (CI / offline / low-resource hosts / tests): skip the ~90 MB local
+	// model entirely and use the deterministic hash embedder.
+	if os.Getenv("MYKEEP_EMBEDDER") == "hash" {
+		return embed.NewHashEmbedder(dim)
 	}
 	le, err := embed.NewLocalEmbedder(ctx, filepath.Join(layout.DataDir, "models"), model)
 	if err != nil {
