@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project status
 
-**v1 implemented; public repo, MIT-licensed** ([github.com/lexxx233/mykeep-memory-capsule](https://github.com/lexxx233/mykeep-memory-capsule)). The full design lives in `PLAN.md` (the source of truth for decisions D1–D20); done-vs-deferred status in `IMPLEMENTATION.md`. A working Go implementation is in place: encrypted store, local CPU embeddings, keyword + semantic + temporal recall, agent-driven reflect over a knowledge hierarchy, supersession + orphan pruning, and a REST API + cross-platform GUI. Runs end-to-end (first-launch setup → retain → recall/reflect → encrypted persistence across restarts).
+**v1 implemented; public repo, MIT-licensed** ([github.com/lexxx233/mykeep-capsule](https://github.com/lexxx233/mykeep-capsule)). The full design lives in `PLAN.md` (the source of truth for decisions D1–D20); done-vs-deferred status in `IMPLEMENTATION.md`. A working Go implementation is in place: encrypted store, local CPU embeddings, keyword + semantic + temporal recall, agent-driven reflect over a knowledge hierarchy, supersession + orphan pruning, and a REST API + cross-platform GUI. Runs end-to-end (first-launch setup → retain → recall/reflect → encrypted persistence across restarts).
 
 **Build / test / run** (Go 1.26+, pure Go, no CGo):
 

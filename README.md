@@ -67,7 +67,7 @@ your assistant — no MCP server, no plugin, no config files.
 ## 🚀 Quick start
 
 ```sh
-git clone https://github.com/lexxx233/mykeep-memory-capsule.git && cd mykeep-memory-capsule
+git clone https://github.com/lexxx233/mykeep-capsule.git && cd mykeep-capsule
 go build ./cmd/mykeep      # or: make build  ->  bin/mykeep
 ./bin/mykeep               # opens the GUI in your browser (double-click on a stick)
 ```
